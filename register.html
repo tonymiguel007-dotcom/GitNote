@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitNote · Sign Up</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-left">
+            <a href="index.html" class="back-btn"><i class="fas fa-arrow-left"></i> Back</a>
+        </div>
+        <div class="nav-center">
+            <h1 class="logo">📝 GitNote</h1>
+        </div>
+        <div class="nav-right"></div>
+    </nav>
+
+    <main class="auth-container">
+        <div class="auth-card">
+            <h2>Sign Up</h2>
+            <form id="registerForm">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" placeholder="Enter a username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" placeholder="••••••••" required>
+                </div>
+                <div class="form-group">
+                    <label for="confirm">Confirm Password</label>
+                    <input type="password" id="confirm" placeholder="••••••••" required>
+                </div>
+                <button type="submit" class="btn-auth">Sign Up</button>
+            </form>
+            <p class="auth-switch">Already have an account? <a href="login.html">Sign In</a></p>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+            const confirm = document.getElementById('confirm').value.trim();
+            if (password !== confirm) {
+                alert('Passwords do not match');
+                return;
+            }
+            try {
+                await registerUser(username, password);
+                alert('Registration successful! You can now sign in.');
+                window.location.href = 'login.html';
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    </script>
+</body>
+</html>

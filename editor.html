@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitNote · Editor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navbar editor-nav">
+        <div class="nav-left">
+            <a href="index.html" class="back-btn"><i class="fas fa-arrow-left"></i> Back</a>
+        </div>
+        <div class="nav-right" id="navRight">
+            <!-- Filled by JS -->
+        </div>
+    </nav>
+
+    <main class="container editor-container">
+        <input type="text" id="noteTitle" placeholder="Note title" class="editor-title">
+
+        <!-- Toolbar with Word-like formatting -->
+        <div class="toolbar">
+            <button class="tool-btn" id="boldBtn" title="Bold (Ctrl+B)"><i class="fas fa-bold"></i></button>
+            <button class="tool-btn" id="italicBtn" title="Italic (Ctrl+I)"><i class="fas fa-italic"></i></button>
+            <button class="tool-btn" id="underlineBtn" title="Underline (Ctrl+U)"><i class="fas fa-underline"></i></button>
+            <div class="tool-divider"></div>
+            <button class="tool-btn" id="linkBtn" title="Insert Link (Ctrl+K)"><i class="fas fa-link"></i></button>
+            <button class="tool-btn" id="imageBtn" title="Insert Image"><i class="fas fa-image"></i></button>
+            <div class="tool-divider"></div>
+            <div class="color-picker-container">
+                <button class="tool-btn" id="colorBtn" title="Text Color"><i class="fas fa-palette"></i></button>
+                <div id="colorPalette" class="color-palette hidden">
+                    <div class="color-swatch" style="background: #ef4444;" data-color="#ef4444"></div>
+                    <div class="color-swatch" style="background: #3b82f6;" data-color="#3b82f6"></div>
+                    <div class="color-swatch" style="background: #22c55e;" data-color="#22c55e"></div>
+                    <div class="color-swatch" style="background: #a855f7;" data-color="#a855f7"></div>
+                    <div class="color-swatch" style="background: #f97316;" data-color="#f97316"></div>
+                    <div class="color-swatch" style="background: #ec4899;" data-color="#ec4899"></div>
+                    <div class="color-swatch" style="background: #78716c;" data-color="#78716c"></div>
+                    <div class="color-swatch" style="background: #94a3b8;" data-color="#94a3b8"></div>
+                    <div class="color-swatch" style="background: #06b6d4;" data-color="#06b6d4"></div>
+                    <div class="color-swatch" style="background: #84cc16;" data-color="#84cc16"></div>
+                    <div class="color-swatch" style="background: #fbbf24;" data-color="#fbbf24"></div>
+                    <div class="color-swatch" style="background: #b45309;" data-color="#b45309"></div>
+                    <div class="color-swatch" style="background: #64748b;" data-color="#64748b"></div>
+                    <div class="color-swatch" style="background: #000000;" data-color="#000000"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Editor content area (contenteditable for Word-like editing) -->
+        <div id="editorContent" class="editor-content" contenteditable="true" placeholder="Write your note here..."></div>
+
+        <!-- Hidden textarea to store raw content for saving -->
+        <textarea id="noteContent" style="display: none;"></textarea>
+
+        <div class="action-buttons">
+            <button id="forkBtn" class="btn-fork"><i class="fas fa-code-branch"></i> Fork</button>
+            <button id="shareBtn" class="btn-share"><i class="fas fa-share-alt"></i> Share</button>
+            <button id="saveBtn" class="btn-save"><i class="fas fa-save"></i> Save</button>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            await updateNavbar();
+
+            if (!isAuthenticated()) {
+                alert('You must be logged in to create or edit notes.');
+                window.location.href = 'login.html';
+                return;
+            }
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const noteId = urlParams.get('id');
+            let currentNote = null;
+
+            // Setup editor
+            const editorContent = document.getElementById('editorContent');
+            const noteContent = document.getElementById('noteContent');
+            const titleInput = document.getElementById('noteTitle');
+            const colorPalette = document.getElementById('colorPalette');
+            const colorBtn = document.getElementById('colorBtn');
+
+            if (noteId) {
+                try {
+                    currentNote = await getNoteById(noteId);
+                    titleInput.value = currentNote.title;
+                    editorContent.innerHTML = currentNote.content; // Set as HTML
+                    noteContent.value = currentNote.content;
+                } catch (err) {
+                    alert('Note not found');
+                    window.location.href = 'index.html';
+                }
+            } else {
+                currentNote = null;
+                editorContent.innerHTML = '';
+            }
+
+            // Update hidden textarea when editor content changes
+            editorContent.addEventListener('input', () => {
+                noteContent.value = editorContent.innerHTML;
+            });
+
+            // Save button
+            document.getElementById('saveBtn').addEventListener('click', saveNote);
+
+            // Fork button
+            document.getElementById('forkBtn').addEventListener('click', () => {
+                if (currentNote && currentNote.id) {
+                    forkNote(currentNote.id);
+                } else {
+                    alert('Save the note first before forking.');
+                }
+            });
+
+            // Share button
+            document.getElementById('shareBtn').addEventListener('click', () => {
+                if (currentNote && currentNote.id) {
+                    const url = window.location.origin + '/detail.html?id=' + currentNote.id;
+                    if (navigator.clipboard) {
+                        navigator.clipboard.writeText(url).then(() => alert('Link copied!'));
+                    } else {
+                        alert(url);
+                    }
+                } else {
+                    alert('Save the note first.');
+                }
+            });
+
+            // --- Word-like formatting ---
+            function execCommand(cmd, value = null) {
+                document.execCommand(cmd, false, value);
+                editorContent.focus();
+                noteContent.value = editorContent.innerHTML;
+            }
+
+            document.getElementById('boldBtn').addEventListener('click', () => execCommand('bold'));
+            document.getElementById('italicBtn').addEventListener('click', () => execCommand('italic'));
+            document.getElementById('underlineBtn').addEventListener('click', () => execCommand('underline'));
+
+            document.getElementById('linkBtn').addEventListener('click', () => {
+                const url = prompt('Enter URL:', 'https://');
+                if (url) execCommand('createLink', url);
+            });
+
+            document.getElementById('imageBtn').addEventListener('click', () => {
+                const url = prompt('Enter image URL:', 'https://');
+                if (url) execCommand('insertImage', url);
+            });
+
+            // Color palette toggle
+            colorBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                colorPalette.classList.toggle('hidden');
+            });
+
+            // Close palette when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!colorBtn.contains(e.target) && !colorPalette.contains(e.target)) {
+                    colorPalette.classList.add('hidden');
+                }
+            });
+
+            // Color swatch click
+            document.querySelectorAll('.color-swatch').forEach(swatch => {
+                swatch.addEventListener('click', () => {
+                    const color = swatch.dataset.color;
+                    execCommand('foreColor', color);
+                    colorPalette.classList.add('hidden');
+                });
+            });
+
+            // --- Keyboard Shortcuts ---
+            document.addEventListener('keydown', (e) => {
+                // Ctrl+S = Save
+                if (e.ctrlKey && e.key === 's') {
+                    e.preventDefault();
+                    saveNote();
+                }
+                // Ctrl+B = Bold (browser default, but we ensure focus)
+                if (e.ctrlKey && e.key === 'b') {
+                    e.preventDefault();
+                    execCommand('bold');
+                }
+                // Ctrl+I = Italic
+                if (e.ctrlKey && e.key === 'i') {
+                    e.preventDefault();
+                    execCommand('italic');
+                }
+                // Ctrl+U = Underline
+                if (e.ctrlKey && e.key === 'u') {
+                    e.preventDefault();
+                    execCommand('underline');
+                }
+                // Ctrl+K = Link
+                if (e.ctrlKey && e.key === 'k') {
+                    e.preventDefault();
+                    const url = prompt('Enter URL:', 'https://');
+                    if (url) execCommand('createLink', url);
+                }
+            });
+        });
+
+        async function saveNote() {
+            const title = document.getElementById('noteTitle').value.trim() || 'Untitled';
+            const content = document.getElementById('noteContent').value; // Get from hidden textarea
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const noteId = urlParams.get('id');
+
+            try {
+                if (noteId) {
+                    await updateNote(noteId, title, content);
+                    alert('Note updated!');
+                    window.location.href = `detail.html?id=${noteId}`;
+                } else {
+                    const newNote = await createNote(title, content);
+                    window.location.href = `detail.html?id=${newNote.id}`;
+                }
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+    </script>
+</body>
+</html>

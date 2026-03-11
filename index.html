@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitNote · Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dashboard-bg"></body>
+    <nav class="navbar">
+        <div class="nav-left">
+            <h1 class="logo">📝 GitNote</h1>
+        </div>
+        <div class="nav-center">
+            <input type="text" id="searchInput" placeholder="Search notes..." class="search-bar">
+        </div>
+        <div class="nav-right" id="navRight">
+            <!-- Filled by updateNavbar() -->
+        </div>
+    </nav>
+
+    <main class="container">
+        <div class="dashboard-header">
+            <h2>My Notes</h2>
+        </div>
+
+        <div id="notesGrid" class="notes-grid">
+            <!-- Notes will be injected here -->
+        </div>
+
+        <button id="newNoteBtn" class="fab" title="Create new note">
+            <i class="fas fa-plus"></i>
+        </button>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            await updateNavbar();
+            await loadAndDisplayNotes();
+
+            document.getElementById('newNoteBtn').addEventListener('click', () => {
+                if (!isAuthenticated()) {
+                    alert('Please log in to create a note.');
+                    window.location.href = 'login.html';
+                    return;
+                }
+                window.location.href = 'editor.html';
+            });
+
+            document.getElementById('searchInput').addEventListener('input', (e) => {
+                const term = e.target.value.toLowerCase();
+                filterNotes(term);
+            });
+        });
+
+        let allNotes = [];
+
+        async function loadAndDisplayNotes() {
+            try {
+                allNotes = await getNotes();
+                displayNotes(allNotes);
+            } catch (err) {
+                console.error(err);
+                document.getElementById('notesGrid').innerHTML = '<p class="empty-state">Error loading notes.</p>';
+            }
+        }
+
+        async function displayNotes(notes) {
+            const grid = document.getElementById('notesGrid');
+            const currentUser = getCurrentUser();
+            grid.innerHTML = '';
+
+            if (notes.length === 0) {
+                grid.innerHTML = '<p class="empty-state">No notes yet. <a href="editor.html">Create your first note</a>.</p>';
+                return;
+            }
+
+            for (const note of notes) {
+                let forkCount = '?';
+                try {
+                    const forks = await getForks(note.id);
+                    forkCount = forks.length;
+                } catch (e) { /* ignore */ }
+
+                const card = document.createElement('div');
+                card.className = 'note-card';
+                card.dataset.id = note.id;
+
+                let actionsHtml = `
+                    <div class="card-actions">
+                        <button class="action-btn fork-btn" title="Fork this note"><i class="fas fa-code-branch"></i></button>
+                        <button class="action-btn share-btn" title="Copy link to share"><i class="fas fa-share-alt"></i></button>
+                `;
+                if (currentUser && currentUser.username === note.author) {
+                    actionsHtml += `
+                        <button class="action-btn edit-btn" title="Edit note"><i class="fas fa-edit"></i></button>
+                    `;
+                }
+                actionsHtml += `</div>`;
+
+                card.innerHTML = `
+                    <h3 class="note-title">${escapeHtml(note.title)}</h3>
+                    <p class="note-preview">${escapeHtml(note.content.substring(0, 60))}${note.content.length > 60 ? '…' : ''}</p>
+                    <div class="card-footer">
+                        <span class="fork-badge"><i class="fas fa-code-branch"></i> ${forkCount}</span>
+                        <span class="note-date">${new Date(note.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div class="card-author">by ${escapeHtml(note.author)}</div>
+                    ${actionsHtml}
+                `;
+
+                // Fork button
+                const forkBtn = card.querySelector('.fork-btn');
+                forkBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    if (!isAuthenticated()) {
+                        alert('Please log in to fork a note.');
+                        window.location.href = 'login.html';
+                        return;
+                    }
+                    await forkNote(note.id);
+                });
+
+                // Share button
+                const shareBtn = card.querySelector('.share-btn');
+                shareBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const url = `${window.location.origin}/detail.html?id=${note.id}`;
+                    if (navigator.clipboard) {
+                        navigator.clipboard.writeText(url).then(() => alert('Link copied!'));
+                    } else {
+                        alert(url);
+                    }
+                });
+
+                // Edit button (if present)
+                const editBtn = card.querySelector('.edit-btn');
+                if (editBtn) {
+                    editBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        window.location.href = `editor.html?id=${note.id}`;
+                    });
+                }
+
+                // Card click opens detail
+                card.addEventListener('click', () => {
+                    window.location.href = `detail.html?id=${note.id}`;
+                });
+
+                grid.appendChild(card);
+            }
+        }
+
+        function filterNotes(term) {
+            const filtered = allNotes.filter(n =>
+                n.title.toLowerCase().includes(term) ||
+                n.content.toLowerCase().includes(term)
+            );
+            displayNotes(filtered);
+        }
+    </script>
+    <script>
+    // Keyboard shortcut for new note (already handled globally)
+    // Keyboard shortcut for search is handled in app.js
+    
+    // Add Ctrl+S shortcut for saving (already in editor)
+</script>
+</body>
+</html>

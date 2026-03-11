@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitNote · Profile</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-left">
+            <a href="index.html" class="back-btn"><i class="fas fa-arrow-left"></i> Back</a>
+        </div>
+        <div class="nav-right" id="navRight">
+            <!-- Filled by JS -->
+        </div>
+    </nav>
+
+    <main class="container profile-container">
+        <div class="profile-header">
+            <div class="profile-avatar"><i class="fas fa-user-circle"></i></div>
+            <h2 id="profileUsername">Loading...</h2>
+        </div>
+
+        <!-- Statistics Dashboard -->
+        <div class="stats-dashboard">
+            <h3><i class="fas fa-chart-bar"></i> Your Statistics</h3>
+            <div id="statsContainer" class="stats-grid">
+                <!-- Stats will be filled by JS -->
+            </div>
+        </div>
+
+        <h3>Notes created by <span id="profileUsername2"></span></h3>
+        <div id="userNotesGrid" class="notes-grid">
+            <!-- Notes will be injected here -->
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            await updateNavbar();
+
+            const currentUser = getCurrentUser();
+            if (!currentUser) {
+                alert('Please log in to view your profile.');
+                window.location.href = 'login.html';
+                return;
+            }
+
+            document.getElementById('profileUsername').textContent = currentUser.username;
+            document.getElementById('profileUsername2').textContent = currentUser.username;
+
+            try {
+                const allNotes = await getNotes();
+                const userNotes = allNotes.filter(n => n.author === currentUser.username);
+                
+                // Calculate statistics
+                const totalNotes = userNotes.length;
+                let totalWords = 0;
+                let totalForks = 0;
+                let mostForkedNote = { title: 'None', count: 0 };
+
+                for (const note of userNotes) {
+                    // Count words (approximate)
+                    const wordCount = note.content.replace(/<[^>]*>/g, '').split(/\s+/).filter(w => w.length > 0).length;
+                    totalWords += wordCount;
+
+                    // Count forks
+                    const forks = await getForks(note.id);
+                    totalForks += forks.length;
+
+                    if (forks.length > mostForkedNote.count) {
+                        mostForkedNote = { title: note.title, count: forks.length };
+                    }
+                }
+
+                // Display statistics
+                const statsContainer = document.getElementById('statsContainer');
+                statsContainer.innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-value">${totalNotes}</div>
+                        <div class="stat-label">Total Notes</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${totalWords}</div>
+                        <div class="stat-label">Total Words</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${totalForks}</div>
+                        <div class="stat-label">Total Forks Received</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${mostForkedNote.title !== 'None' ? mostForkedNote.count : 0}</div>
+                        <div class="stat-label">Most Forked: "${mostForkedNote.title !== 'None' ? escapeHtml(mostForkedNote.title.substring(0, 20)) + '...' : 'None'}"</div>
+                    </div>
+                `;
+
+                // Display user notes
+                const grid = document.getElementById('userNotesGrid');
+                grid.innerHTML = '';
+
+                if (userNotes.length === 0) {
+                    grid.innerHTML = '<p class="empty-state">You haven’t created any notes yet. <a href="editor.html">Create one now</a>.</p>';
+                    return;
+                }
+
+                for (const note of userNotes) {
+                    const forkCount = (await getForks(note.id)).length;
+                    const card = document.createElement('div');
+                    card.className = 'note-card';
+                    card.dataset.id = note.id;
+                    card.innerHTML = `
+                        <h3 class="note-title">${escapeHtml(note.title)}</h3>
+                        <p class="note-preview">${escapeHtml(note.content.replace(/<[^>]*>/g, '').substring(0, 60))}${note.content.length > 60 ? '…' : ''}</p>
+                        <div class="card-footer">
+                            <span class="fork-badge"><i class="fas fa-code-branch"></i> ${forkCount} fork${forkCount !== 1 ? 's' : ''}</span>
+                            <span class="note-date">${new Date(note.createdAt).toLocaleDateString()}</span>
+                        </div>
+                    `;
+                    card.addEventListener('click', () => {
+                        window.location.href = `detail.html?id=${note.id}`;
+                    });
+                    grid.appendChild(card);
+                }
+            } catch (err) {
+                console.error(err);
+                document.getElementById('userNotesGrid').innerHTML = '<p class="empty-state">Error loading notes.</p>';
+            }
+        });
+
+        function escapeHtml(unsafe) {
+            if (!unsafe) return '';
+            return unsafe.replace(/[&<>"]/g, function(m) {
+                if(m === '&') return '&amp;';
+                if(m === '<') return '&lt;';
+                if(m === '>') return '&gt;';
+                if(m === '"') return '&quot;';
+                return m;
+            });
+        }
+    </script>
+</body>
+</html>

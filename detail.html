@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitNote · Note Detail</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-left">
+            <a href="index.html" class="back-btn"><i class="fas fa-arrow-left"></i> Back</a>
+        </div>
+        <div class="nav-right" id="navRight">
+            <!-- Filled by JS -->
+        </div>
+    </nav>
+
+    <main class="container detail-container">
+        <div id="noteHeader" class="detail-header">
+            <h1 id="noteTitle">Loading...</h1>
+            <p class="meta">By <span id="noteAuthor"></span> • <span id="noteDate"></span></p>
+        </div>
+
+        <!-- Export buttons -->
+        <div class="export-buttons">
+            <button id="exportPdfBtn" class="btn-export"><i class="fas fa-file-pdf"></i> PDF</button>
+            <button id="exportMarkdownBtn" class="btn-export"><i class="fas fa-file-code"></i> Markdown</button>
+            <button id="exportTxtBtn" class="btn-export"><i class="fas fa-file-lines"></i> Text</button>
+        </div>
+
+        <div id="noteContent" class="detail-content">
+            <!-- Content will be rendered here -->
+        </div>
+
+        <!-- Action buttons -->
+        <div class="detail-actions">
+            <button id="shareDetailBtn" class="btn-share"><i class="fas fa-share-alt"></i> Share</button>
+            <div id="ownerActions" style="display: inline;"></div>
+        </div>
+
+        <!-- Comments Section -->
+        <section class="comments-section">
+            <h2><i class="fas fa-comments"></i> Comments</h2>
+            <div id="commentsContainer" class="comments-container">
+                <!-- Comments will be loaded here -->
+            </div>
+            
+            <!-- Add comment form (only for logged in users) -->
+            <div id="addCommentForm" class="add-comment">
+                <textarea id="commentText" placeholder="Write a comment..." rows="3"></textarea>
+                <button id="postCommentBtn" class="btn-comment">Post Comment</button>
+            </div>
+        </section>
+
+        <section class="fork-section">
+            <h2><i class="fas fa-code-branch"></i> Fork Tree</h2>
+            <div id="forkTree" class="fork-tree">
+                <!-- Forks will appear here -->
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            await updateNavbar();
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const noteId = urlParams.get('id');
+            if (!noteId) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            try {
+                const note = await getNoteById(noteId);
+
+                document.getElementById('noteTitle').textContent = note.title;
+                document.getElementById('noteAuthor').textContent = note.author || 'anonymous';
+                document.getElementById('noteDate').textContent = new Date(note.createdAt).toLocaleDateString();
+
+                // Render content as HTML
+                document.getElementById('noteContent').innerHTML = note.content;
+
+                // --- Export functions ---
+                document.getElementById('exportPdfBtn').addEventListener('click', () => {
+                    exportNoteAsPDF(note.title, note.content);
+                });
+
+                document.getElementById('exportMarkdownBtn').addEventListener('click', () => {
+                    exportNoteAsMarkdown(note.title, note.content);
+                });
+
+                document.getElementById('exportTxtBtn').addEventListener('click', () => {
+                    exportNoteAsText(note.title, note.content);
+                });
+
+                // Share button
+                document.getElementById('shareDetailBtn').addEventListener('click', () => {
+                    const url = window.location.href;
+                    if (navigator.clipboard) {
+                        navigator.clipboard.writeText(url).then(() => alert('Link copied!'));
+                    } else {
+                        alert(url);
+                    }
+                });
+
+                // Owner actions (Edit and Delete)
+                const currentUser = getCurrentUser();
+                const ownerDiv = document.getElementById('ownerActions');
+                if (currentUser && currentUser.username === note.author) {
+                    ownerDiv.innerHTML = `
+                        <a href="editor.html?id=${note.id}" class="btn-edit"><i class="fas fa-edit"></i> Edit</a>
+                        <button id="deleteDetailBtn" class="btn-delete"><i class="fas fa-trash"></i> Delete</button>
+                    `;
+                    document.getElementById('deleteDetailBtn').addEventListener('click', async () => {
+                        if (confirm('Are you sure you want to delete this note?')) {
+                            try {
+                                await deleteNote(note.id);
+                                window.location.href = 'index.html';
+                            } catch (err) {
+                                alert(err.message);
+                            }
+                        }
+                    });
+                }
+
+                // Load comments
+                await loadComments(noteId);
+
+                // Post comment button
+                document.getElementById('postCommentBtn').addEventListener('click', async () => {
+                    if (!isAuthenticated()) {
+                        alert('Please log in to comment.');
+                        window.location.href = 'login.html';
+                        return;
+                    }
+                    const text = document.getElementById('commentText').value.trim();
+                    if (!text) return;
+                    
+                    try {
+                        await addComment(noteId, text);
+                        document.getElementById('commentText').value = '';
+                        await loadComments(noteId);
+                    } catch (err) {
+                        alert(err.message);
+                    }
+                });
+
+                // Load forks
+                await renderForks(note.id);
+
+                // --- Keyboard Shortcuts ---
+                document.addEventListener('keydown', (e) => {
+                    // Ctrl+D = Fork
+                    if (e.ctrlKey && e.key === 'd') {
+                        e.preventDefault();
+                        forkNote(note.id);
+                    }
+                });
+
+            } catch (err) {
+                alert('Note not found');
+                window.location.href = 'index.html';
+            }
+        });
+
+        async function loadComments(noteId) {
+            const comments = await getComments(noteId);
+            const container = document.getElementById('commentsContainer');
+            const currentUser = getCurrentUser();
+
+            if (comments.length === 0) {
+                container.innerHTML = '<p class="empty-comments">No comments yet. Be the first to comment!</p>';
+                return;
+            }
+
+            let html = '';
+            comments.forEach(comment => {
+                html += `
+                    <div class="comment-item">
+                        <div class="comment-header">
+                            <span class="comment-author">${escapeHtml(comment.author)}</span>
+                            <span class="comment-date">${new Date(comment.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        <div class="comment-text">${escapeHtml(comment.text)}</div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        async function renderForks(parentId) {
+            const forks = await getForks(parentId);
+            const container = document.getElementById('forkTree');
+            if (forks.length === 0) {
+                container.innerHTML = '<p class="empty-forks">No forks yet. Be the first to fork this note!</p>';
+                return;
+            }
+
+            async function buildTree(noteId, level = 0) {
+                const children = await getForks(noteId);
+                if (children.length === 0) return '';
+                let html = '';
+                for (const child of children) {
+                    html += `<div class="fork-item" style="margin-left: ${level * 30}px">`;
+                    html += `<span class="fork-badge"><i class="fas fa-code-branch"></i></span> `;
+                    html += `<a href="detail.html?id=${child.id}">${escapeHtml(child.title)}</a>`;
+                    html += ` <small>(${new Date(child.createdAt).toLocaleDateString()})</small>`;
+                    html += await buildTree(child.id, level + 1);
+                    html += '</div>';
+                }
+                return html;
+            }
+
+            container.innerHTML = await buildTree(parentId);
+        }
+
+        function escapeHtml(unsafe) {
+            if (!unsafe) return '';
+            return unsafe.replace(/[&<>"]/g, function(m) {
+                if(m === '&') return '&amp;';
+                if(m === '<') return '&lt;';
+                if(m === '>') return '&gt;';
+                if(m === '"') return '&quot;';
+                return m;
+            });
+        }
+    </script>
+</body>
+</html>
